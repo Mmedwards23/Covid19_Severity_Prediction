@@ -25,10 +25,6 @@ for (i in 1:3) {
   
 }
 
-set.seed(183)
-training_smaller <- train_df |> 
-  slice_sample(n = 1000) #just to test the models first... 
-
 recipe_default <- recipe(disease_status ~ ., 
                          train_df) |>
   step_zv(all_predictors()) |>  # removes covariates with no variance
@@ -96,14 +92,11 @@ cl <- makePSOCKcluster(6)
 registerDoParallel(cl) 
 
 set.seed(5581)
-#not sure this will actually be parallel
+
 workflows_tbl_fit <- workflows_tbl |>
   rowwise() |>
   mutate(fits = list(fit(workflow_objects, 
                          train_df)))
-#glm wouldnt converge
-
-#have to do each test set 1 by 1...
 
 #test set 1
 set.seed(8247)
@@ -187,7 +180,7 @@ predictions_tbl <- rbind(predictions_tbl_1, predictions_tbl_2, predictions_tbl_3
 write_csv(predictions_tbl, "Merged_Dataframes/Predictions.csv")
 
 #Bootstrapping coefficient estimates
-#reuse recipe_default, wf_elastic, wf_xgb
+#reuse recipe_default, wf_elastic
 
 set.seed(5581)
 #note, same seed as initial fit, although since being used with bootstrap

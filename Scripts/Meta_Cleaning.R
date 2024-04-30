@@ -13,8 +13,7 @@ train_df <- read_csv("merged_train_filtered_uncleaned.csv", col_names = TRUE)
 train_df |> 
   filter(str_detect(patient_age, "[0-9]{2}[-][A-Z]")) |> 
   glimpse() # 1 case
-# i am going to exclude this as it would make this person 121 years old. I think this info is entered wrong
-#but I wont assume what it should be i will just exclude it
+# i am going to exclude this as it would make this person 121 years old which is unlikely
 
 #age and gender are wrong
 train_df |> 
@@ -26,10 +25,6 @@ train_df |>
 test_df |> 
   select(patient_age) |> 
   table()
-#<1 I think should get caught
-#90+ should get caught
-#ranges, months should be handled
-#"ambulatory" "hospitalized", "ND" are weird
 
 test_df |> 
   filter(patient_age == "Ambulatory" | patient_age == "Hospitalized"
@@ -139,7 +134,6 @@ test_list <- test_df_corr |>
   mutate(n = 1:n())
 
 joined <- full_join(test_list, train_list, by = "patient_status")
-#limited overlap..... TT_TT
 
 #keeping to three categories as like the paper- unknown, mild, and severe
 unknown_list <- c("not provided", "unown", "missing", "unknwon", "ou", "no", "yes", 

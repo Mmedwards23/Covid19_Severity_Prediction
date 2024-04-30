@@ -68,9 +68,8 @@ recipe_default <- recipe(disease_status ~ .,
   step_novel(all_nominal_predictors()) #allow for new factors in test data
 
 #I have a lot of data, and while I could split up the training data into partitions or a validation set
-#to use on tuning the parameters
-#so i will mc split for 3, and then use the test_set_03 later after I have my 'results' 
-#to make sure it doesnt look too wild
+#to use on tuning the parameters, I want to save all three as holdout datasets
+#so instead I will use an mc_cv split of 3 for hyperparameter tuning
 
 log <- logistic_reg() |>
   set_engine("glm") |> 
@@ -82,7 +81,7 @@ wf_log <- workflow() |>
 
 #lasso
 lasso <- logistic_reg(penalty = tune(), 
-                      mixture = tune()) |> #elastic net with 0.5.....
+                      mixture = tune()) |>
   set_engine("glmnet") |> 
   set_mode("classification")
 
@@ -92,7 +91,6 @@ wf_lasso <- workflow() |>
 
 #random forest
 rf <- rand_forest(trees = tune(), min_n = 2) |> 
-  #could tune mtry, trees, and min_n
   set_mode("classification") |>
   set_engine("ranger")
 
@@ -125,7 +123,7 @@ comparison_split <- train_df |>
   mc_cv(times = 3)
 
 #models with tuning
-# - elastic net/lasso: penalty, elastic net -ness
+# - elastic net/lasso: penalty, mixture
 # - random forest: trees
 # - xgboost: trees, tree_depth, learn_rate
 # - lightgbm: trees, tree_depth, learn_rate

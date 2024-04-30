@@ -24,9 +24,6 @@ df_train |>
   filter(gender == "Male" | gender == "Female") |> 
   filter(patient_age != "unknown" | patient_age != "N/A") #13,778 entries
 
-#Since making sure there are entries for gender, and for age leaves 13k entries
-#I am going to go forward with this filtering.... however....
-
 table(df_train$gender)
 #why do some of them have numbers for gender?
 
@@ -59,18 +56,16 @@ test_set_02_01 <- read_delim("test_set_02_mexico_part1.tsv", show_col_types = FA
 test_set_02_02 <- read_delim("test_set_02_mexico_part2.tsv", show_col_types = FALSE) |> clean_names()
 test_set_03 <- read_delim("test_set_03_italy.tsv", show_col_types = FALSE) |> clean_names()
 
-#all of them have some missing info for gender age records, but not many
 test_set_03 |> 
   filter(gender != "Male" & gender != "Female" & gender != "unknown") |> 
   head() |> 
   select(patient_age, gender)
 #there are at least a few that have patient age and gender swapped like with the training set
-#so I will do my best to save those but anything with gender unknown is going to be eliminated, 
-#like with the training
+#so I will do my best to save those but anything with gender unknown is going to be eliminated
 
 df_test <- rbind(test_set_01, test_set_02_01, test_set_02_02, test_set_03)
-#after filtering & sampling, will be left with a 6,000 record(ish) test set
-#which can be sub-split into 3 different test sets
+#after filtering & sampling, will be left with a 6,000 record test set
+#which can be further split into 3 different test sets
 
 df_test |> select(gender) |> table()
 

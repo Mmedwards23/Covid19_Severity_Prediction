@@ -91,8 +91,7 @@ training_seq_data <-
 
 #I suggest removing the intermediate data frames from the environment now
 
-#joining time :)
-#i wanted the meta data first so right join
+#i wanted the meta data columns first so right join
 testing_df <- right_join(testing_metadata_cleaned, 
                          testing_seq_data, 
                          by = "accession_id") |> 
@@ -122,8 +121,7 @@ testing_df <- testing_df |>
 #toss out columns I wont be using
 #disease_status can be left alone,
 #gender is to be converted to 0 or 1
-#and I am going to try out tokenization instead of dummy variable encoding...
-#and thus anything with 'X' as the code is being converted to NA
+#anything with 'X' as the code is being converted to NA
 training_df <- training_df |> 
   select(-c(1, 6, 7, 8, 9, 10, 11)) |> 
   mutate(patient_age = as.numeric(patient_age),

@@ -1,5 +1,3 @@
-#Grabbing the sequences for only the accession IDs i am going to use
-#in both the training and test sets
 library(stringr)
 library(phylotools)
 library(Biostrings)
@@ -9,6 +7,9 @@ default_wd <- getwd()
 
 train <- read.csv("Cleaned_Data/training_metadata_cleaned.csv")
 test <- read.csv("Cleaned_Data/testing_metadata_cleaned.csv")
+
+#Grabbing the sequences for only the accession IDs i am going to use
+#in both the training and test sets
 
 train_acc <- train |> 
   pull(accession_id)
@@ -26,9 +27,6 @@ fasta_list <- fasta_list |>
   filter(!str_detect(file_name, "reference"))
 
 reference_seq <- read.fasta(file = "EPI_ISL_402124-S_reference_genome.fasta")
-
-
-
 
 read_fasta_files <- function(file_name) {
   fasta_tmp <- read.fasta(file = file_name_tmp, clean_name = TRUE)
@@ -95,7 +93,7 @@ registerDoParallel(cores = 10)
 
 file_name_aligned = list()
 
-#off to the races. will take a while
+#each file took 40mins - 1 hour
 foreach(i = 1:length(fasta_file_names)) %dopar% {
   file_name_aligned[[i]] <- str_c(fasta_file_names[[i]], "_aligned")
   file_name_csv <- str_c(file_name_aligned[[i]], ".csv")

@@ -44,7 +44,6 @@ truncated <- as.list(truncated_df |> pull(accession_id))
 truncated_df |> 
   write_csv(file = "Oddly_Truncated_Sequences.csv")
 
-#onwards...
 test_set_01_2023_on_aligned <- test_set_01_2023_on_aligned |> 
   filter(accession_id %nin% truncated)
 
@@ -62,8 +61,7 @@ for (i in 1:10) {
   assign(df_list[[i]], df_mod)
 }
 
-#if it doesnt start with ATG, im cutting it
-#upwards of 3 million rows which is horrendous but we ride
+#if it doesnt start with ATG(the start codon), it is being removed
 for (i in 1:10) {
   df_mod <- get(df_list[[i]]) |> 
     filter(aa_1 == "ATG") |> 
@@ -110,7 +108,7 @@ basepairs_to_aa <- function(df) {
       #not much else I can do with this
     
       str_detect(aa_seq, "[ACGTRYKMSWBDHVN]{2}") ~ "", #if it is incomplete, and I cant use
-      #the wobble effect to my advantage, then set it to blank as its useless to me
+      #the wobble effect to my advantage, then set it to blank
     
       .default = aa_seq #if anything else is going on, do not convert
     ))
@@ -128,8 +126,8 @@ foreach(i = 1:10) %dopar% {
   df_mod <- get(df_list[[i]]) |> 
     basepairs_to_aa() |> 
     select(-aa_seq) |> 
-    filter(!is.na(aa_code)) |> #drop any rows with NA values, NAs will be introduced in the pivot wider
-  #as are needed
+    filter(!is.na(aa_code)) |> #drop any rows with NA values
+    #NAs will be introduced in the pivot wider as are needed
     pivot_wider(names_from = aa_position,
                 values_from = aa_code)
   
