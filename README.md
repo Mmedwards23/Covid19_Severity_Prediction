@@ -1,5 +1,7 @@
-Inspired by the paper "Predicting COVID-19 disease severity from SARS-CoV-2 spike protein sequence by mixed effects machine learning" by Sokhansanj and Rosen at DOI: 10.1016/j.compbiomed.2022.105969
+Predicting Covid-19 Severity Using Patient Metadata & Spike Protein Sequence
+Final Project for UCONN Spring 2024 STATS 5125 - Statistical Computing for Data Science
 
+Inspired by the paper "Predicting COVID-19 disease severity from SARS-CoV-2 spike protein sequence by mixed effects machine learning" by Sokhansanj and Rosen at DOI: 10.1016/j.compbiomed.2022.105969
 
 General Outline:
 - GISAID Epi-sets
