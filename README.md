@@ -1,7 +1,9 @@
+Inspired by the paper "Predicting COVID-19 disease severity from SARS-CoV-2 spike protein sequence by mixed effects machine learning" by Sokhansanj and Rosen at DOI: 10.1016/j.compbiomed.2022.105969
+
+
 General Outline:
 - GISAID Epi-sets
 - Package Versions
-- Directory Organization
 
 GISAID Epi-sets:
 Training: 
@@ -26,6 +28,8 @@ DOI: 10.55876/gis8.240430rt
 
 
 Package Versions: 
+Please note this is a non-exhaustive list of packages used, and many contain dependencies on other packages, would could result in an alternate version being downloaded than the one I utilized.
+
 R Version 4.3.2
 tidyverse - 2.0.0
 janitor - 2.2.0
@@ -44,24 +48,3 @@ xgboost - 1.7.7.1
 ranger - 0.16.0
 yardstick - 1.3.1
 tidymodels - 1.2.0
-
-
-A breakdown of the folder directory for this project:
-| - /Cleaned_Data/
-	| - /aligned_files/
-		| -  intermediate aligned files(.csv)
-	| -  converted to amino acid aligned files(.csv)
-	| -  metadata cleaned files (.csv)
-	
-| - /Merged_Dataframes/
-	| - merged dataframes for inpute into modeling
-	| - coefficeint, prediction files generated from modeling fits
-
-| - /Raw_Data/ 
-	| - raw .fasta and .tsv files from GISAID.org
-
-| - /Scripts/
-	| - Project scripts, 7 in total
-
-| - /Tuning_Metric_Dfs/
-	| - saved dataframes from hyperparameter tuning

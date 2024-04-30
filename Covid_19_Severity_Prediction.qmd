@@ -1,0 +1,748 @@
+---
+title: "Covid-19 Severity Prediction"
+author: "Madison Beebe"
+date: 30 APR 2024
+format: 
+  html:
+    embed-resources: true
+editor: visual
+bibliography: references.bib
+---
+
+# Introduction and Inspiration
+
+The Covid-19 pandemic brought many changes and adjustments to life both in the short and long-term. There was a concerted effort across countries to collect as much data about the pandemic as possible in order to guide the best practices for avoiding infections, death-rates, and general spread of the virus. There is an abundance of data revolving around Covid-19, concerning infection rates, vaccination rates, and susceptibility. In addition to all of these is sequencing data from the Covid-19 genome.
+
+My goal is to coerce the sequencing data along with metadata into statistical models to predict the severity of Covid-19 a patient faced. My original inspiration for this idea came the paper "Predicting COVID-19 disease severity from SARS-CoV-2 spike protein sequence by mixed effects machine learning" by Sokhansanj and Rosen[@Sokhansanj], and also by my previous laboratory experience in a Covid-19 testing lab, of which contributed sequences to the same database I used for this project. The aforementioned paper used the sequence for the Spike protein of the Covid-19 genome, which plays a critical role in the infection of cells by the virus[@Magazine]. Mutations within this protein could enhance the infectiousness of the virus, which in turn could lend to a rise in the severity of the symptoms experienced. Hence, the Spike protein(S-protein) makes for a prime candidate in monitoring for mutations and modeling.
+
+## Document Outline:
+
+-   Dataset Information
+
+-   Data Cleaning & Transformation
+
+    -   Outline of scripts
+
+    -   Walk through of each data cleaning script
+
+-   Dataset Visualizations
+
+-   Modeling Goals and Approaches
+
+    -   Summary of model hyperparameters
+
+    -   Results of tuning hyperparameters
+
+-   Model Evaluations
+
+    -   Accuracy, F1-Score, and MCC
+
+    -   ROC and ROC-AUC
+
+    -   Fit Assessment
+
+-   Overall Results Discussion
+
+-   Information for Replication
+
+-   Works Cited
+
+## About the Data
+
+The data was downloaded from the GISAID database found at: <https://gisaid.org/>
+
+GISAID is a database that hosts millions of viral sequencing records and associated patient metadata. The data is intended for use in research and for monitoring epidemics- including Covid-19. It allows researchers to pull data into their own devices for use in research studies, or for other projects such as the variant tracking and establishing reference sequences. Data can be submitted by established laboratories, including hospital, commercial, and academic labs.
+
+The original paper by Sokhansanj and Rosen[@Sokhansanj] utilized Covid-19 data from the GISAID database. There is limited overlap between the sequences used in the previous paper and those utilized within this report, as I applied more restrictive cutoffs for sequence selection including the sequence quality. This report is not intended to be an exact replication of the previously mentioned paper, but rather inspired by it and applied to new data and possibly new Covid-19 mutations.
+
+Please note that GISAID guidelines prohibit the sharing of the data directly- permission must be requested from GISAID and all data downloaded from the GISAID database.
+
+For the selection of the data, I used the following restrictions to pull data from GISAID across both the training and testing sets of data:
+
+-   genome must be considered 'complete'
+
+-   genome must be considered 'High coverage'
+
+-   Patient status is available
+
+-   Collection date complete
+
+-   Host = Human
+
+For the training data, the following additional restrictions were used:
+
+-   Location: "North America / USA / ..."
+
+-   Collection(date): 2021-01-01 to 2022-01-01
+
+For the testing data, there were three separate test sets pulled:
+
+#01 - Future Dates(2023 on):
+
+-   Collection(date): 2023-01-01 to present day
+
+#02 - Similar Region, Same Time frame:
+
+-   Location: "North America / Mexico / ..."
+
+-   Collection(date): 2021-01-01 to 2022-01-01 (aprox.)
+
+-   2000 Records randomly sampled
+
+#03 - Different Region, Same Time frame:
+
+-   Location: "Europe / Italy / ..."
+
+-   Collection(date): 2021-01-01 to 2022-01-01 (aprox.)
+
+-   2000 Records randomly sampled
+
+GISAID offers limited options for download formats for data- the patient metadata is downloaded as .tsv files, and the sequence files are downloaded as .FASTA files. GISAID also only allows the download of 10,000 records at a time, so the training data had to be downloaded in three rounds.
+
+## Data Cleaning & Transformation
+
+While the aforementioned restrictions when downloading data does help to filter out 'low-quality' records, it is not a complete effort. There are a total of 7 .R script files for this project, 5 of which that break up the data cleaning steps. This was done so that each big 'step' of the data cleaning roughly has its own script. Due to the size of the datasets, intermediate files were also saved at the completion of some scripts and re-read in at the start of the next script as otherwise some processes took over an hour to run each file. The patient metadata was cleaned first, before moving on to the sequence files and using only the records that exist in the metadata dataframes. Scripts 6 and 7 deal with modeling and evaluation, and will be discussed in the modeling sections.
+
+Below is the order of the scripts, and a brief description of their purpose:
+
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+| Order | Script File Name             | Description                                                                             |
++=======+==============================+=========================================================================================+
+| 01    | Initial_Metadata_Filtering.R | 1.  Combine the metadata .tsv files into training and test sets                         |
+|       |                              | 2.  Filter any records lacking basic information(`gender`, `age`)                       |
+|       |                              | 3.  Sample records for construction of test sets                                        |
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+| 02    | Meta_Cleaning.R              | 1.  Value repair for age and gender variables                                           |
+|       |                              | 2.  Further filtering records that have irreparable values                              |
+|       |                              | 3.  Bin the `patient_status` variable into 3 groups                                     |
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+| 03    | Sequence_Alignment.R         | 1.  Using the FASTA files, align to the GISAID reference sequence for the spike protein |
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+| 04    | Sequence_to_AA.R             | 1.  Converting the nucleotide basepairs to the amino acid 1 letter codes for modeling   |
+|       |                              | 2.  Further filtering upon discovery of poorly sequenced records                        |
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+| 05    | Merge_Files.R                | 1.  Merge the patient metadata dataframes to the sequence dataframes                    |
+|       |                              | 2.  Last round of filtering to eliminate heavily mutated sequences                      |
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+| 06    | Integer_Encoded_tuning.R     | 1.  Reformat the amino acid sequence columns to be integer encoded                      |
+|       |                              | 2.  Perform hyperparameter tuning before modeling                                       |
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+| 07    | Model_Fitting                | 1.  Fit models using the ideal hyperparameter settings from previous script             |
+|       |                              | 2.  Evaluate the models using the test sets                                             |
+|       |                              | 3.  Bootstrapping for coefficient estimates of elastic net                              |
++-------+------------------------------+-----------------------------------------------------------------------------------------+
+
+These scripts will be discussed further below, and the package version requirements can be found in `README.md` file.
+
+#### Script 01 - Initial Cleaning
+
+Using the tidyverse and janitor packages, the TSV files were read in, and basic variable investigations was started. The variables `age`, `gender`, and `vaccination_status` were evaluated, but unfortunately vaccination status was found to being missing information for the majority of records so it would not be included any further.
+
+The test set files were also read in and merged, and mutated to include an indicator depending on which test set the data belonged to- 01 for 2023 and on data, 02 for data from Mexico, and 03 for data from Italy. For test sets 02 and 03, 2000 records were randomly chosen out of the remaining records.
+
+The two dataframes were then saved as .csvs to be processed in the next script.
+
+#### Script 02 - Further Metadata Cleaning
+
+The focus with this script is further cleaning of the age and gender variables using tidyverse and stringr, as in some cases they were swapped in the record, and in other they were in the wrong format(i.e. in months instead of years). If the records could not be cleaned or an assumption about the 'true' record could not be made it was excluded. Below is the display of the type of values that originally existed in the the age variable that were not in the correct format:
+
+```{r}
+library(tidyverse)
+default_wd <- getwd()
+train_df <- read_csv("Raw_Data/merged_train_filtered_uncleaned.csv", col_names = TRUE,
+                     show_col_types = FALSE)
+train_df |> 
+  select(patient_age) |> 
+  filter(!str_detect(patient_age, "[0-9]{2}")) |> 
+  table()
+```
+
+In the above example, the record that was "?", was excluded, but the records including months was converted into years. The records that had "Female" or "Male" were records that had the age and gender values swapped, so they could also be saved. For the age ranges, the lower end of the age range was recorded as the value for age for the record. The records that could be fixed were done so at the same time with a `mutate()` in combination with the `case_when()` function. This process was recorded as the custom function `age_correction()` in the script so that it could be applied to both the train and test dataframes.
+
+After this function was applied, there was further filtering of any more remaining records containing NAs, and variables that would not be included in future modeling(such as vaccination_status) were dropped.
+
+After this, the 'binning' for the patient_status variable was performed. The values were binned into the following categories: "unknown", "mild" and "severe" which is meant to represent how the patient experienced Covid-19- were they severely affected or only experienced a mild case? Unfortunately, some of the records contained values that could not be reconciled to mild or severe, and instead were grouped under "unknown", which were then dropped from the dataframe. The binning was performed using another combination of `mutate()` and `case_when()`, wrapped together under the custom function `bin_patient_status()`.
+
+The resulting two dataframes were then exported as .csv files into the Cleaned_Data folder.
+
+#### Script 03 - Sequence Aligning
+
+This script used the packages stringr, tidyverse, phylotools, and Biostrings. All of the patient FASTA files were read in, and then the reference sequence from the GISAID database was also brought in. These files were all read in as data.frames objects using the `read.fasta()` function from phylotools. With the FASTA format, the accession ID needed to be extracted using the `str_extract()` function first before any alignment could be performed, as otherwise it would not be able to join with the metadata dataframes downstream.
+
+There exist several packages for sequence alignment across different software, and R has several options as well. The inspiration paper used the local pairwise Striped Smith–Waterman (SSW) method via the Python package scikit-bio. However, the scikit-bio developers have decided to depreciate this function, so I decided to use an R package instead to perform the alignment. The paper also used SSW & BLOSUM-62, which can be regarded as a scoring matrix for the algorithm to align the sequences with, or big gaps are punished depending on the kind of mismatch and how large. This method is useful when sequences are of lesser quality, the sequences to be aligned are large, and/or there is a larger amount of variation expected that could make alignment harder. Due to the restrictions I used when pulling from the GISAID database, the segment of Covid-19's genome under investigation spans less than 4,000 basepairs, which is a small region in comparison to some alignment assignments depending on the organism, a certain level of quality is assured, and there is a limit to the variation/mutations that the GISAID database accepts due to quality concerns. For these reasons, I choose to implement the SSW method with the default scoring, not by using the BLOSUM-62 matrix.
+
+With this, I used the `pairwiseAlignment()` function from the Biostrings package. Each alignment takes between 1 to 2 seconds, which seems efficient but at this point the training set is still roughly 13,000 records and the 3 tests sets together are around 6,000. Running all the samples one by one would take over 3 hours to process, which could take even longer depending on the computing capabilities of the machine running the script. For this reason, I explored parallel computing within R and found the `foreach()` and `%par%` functions from the foreach and doParallel packages. This allowed me to set up a for loop that would process each iteration of the for loop in parallel up to the upper limit of the cores I dedicated to the process with the `registerDoParallel()` function. The test set FASTA files were four files in total for the 3 different sets, but the training data was split into 3 files at this point. For each training FASTA file I split them roughly in half, so each file being fed into the foreach() loop was about 2,000 records. This left me with 10 files in total to process the alignment for, with 10 available cores for R to use in processing. Even with running in parallel, the files took about 40 minutes to an hour for each file to generate. The alignment function was wrapped into the custom function `aligning_fn()` for improved code readability within the foreach alignment loop. Each aligned file was then exported to .csv again.
+
+#### Script 04 - Converting nucleotide basepairs to amino acids
+
+Due to the computing length that the initial alignment took, I split up the aligning to the reference sequence and converting to amino acids separately. Within this script, I used the Hmisc, tidyverse, and ggplot2 packages. The aligned files were read, and mutated to include a measurement of the total sequence length. Although the records were all aligned, there could have been records with truncated sequences that I would want to eliminate as it was likely a sequencing issue and that is not desirable to keep within the data for modeling. When viewing some simple bar plots of the data, I could see that the majority of the of the sequences were of very similar length as the reference sequence, which is ideal. It is inevitable that the data would include some insertions or deletions, i.e. mutations, in comparison to the reference sequence but too many of them could complicate modeling.
+
+The below plot demonstrates this:
+
+```{r}
+#| fig-subcap:
+#|   - "Example with 2000 records of training data"
+library(ggplot2)
+theme_set(theme_bw())
+df <- as_tibble(read.csv("Cleaned_Data/aligned_files/train_AUG_to_NOV_01_aligned.csv")) |> 
+                  select(-X)
+df |> 
+  mutate(seq_length = nchar(aligned_seq)) |> 
+  select(seq_length) |> 
+  table()
+
+df |> 
+  mutate(seq_length = nchar(aligned_seq)) |> 
+  ggplot(aes(x = seq_length)) + 
+  geom_histogram(bins = 60) + 
+  labs(title = "All") + 
+  geom_vline(xintercept = 3822, color = "red")
+```
+
+The red line indicates count of 3822, which is the number of basepairs the reference sequence has. As can be seen, the majority of the dataset has the same number of nucleotides as the reference sequence. The count variable is the number of records with the given sequence length. This indicates that these sequences only have point mutations, or an amino acid is swapped for a different one in comparison to the reference sequence. The next biggest group is at sequence length of 3394. This is indicating an deletion of about 142 amino acids, which is a lot. This could indicate that the sequencing of these samples was also of lower quality than previously thought, but I decided to leave these samples in as further investigation in the other datasets, such as the test sets, demonstrated much smaller sequences, making the 3394 length sequences seem much less of a problem in comparison.
+
+For the other datasets, anything that had under 3000 basepairs for length was removed. With 800 basepairs less from the reference sequence, that amounts to approximately 200 amino acids being removed from the sequence, at which point I doubt that the protein would be viable for the Covid-19 virus, leading me to believe that this is a sequencing error as opposed to a genuinely severely-mutated specimen.
+
+The next step before converting to the amino acid codes is to remove any indications of deletion, which with the SSW algorithm denotes with the "-" character, which was done using `str_replace()` from stringr. I also filtered out any rows that did not start with the basepair sequence of "ATG"- which is the start codon. The start codon essentially tells the cellular machinery to start creating the protein, and without it there is no protein. For any sequence that do not begin with "ATG", the sequencing was likely lower quality or it aligned poorly with the reference sequence, and it was not worth keeping in the data.
+
+Next up was the conversion of nucleotide basepairs to amino acid single letter codes. However, in the current dataframe the sequence exists as a single long string, which cannot be easily coerced. To split the column up into 3 nucleotide pieces, I used `separate_wider_position()`, resulting in the sequence columns going from "aa_1" to "aa_1279". From there, I used `pivot_longer()` to transpose the data from being wide which the sequence represent as columns, to it being represented as rows. This means while each individual record now had upwards of 1274 rows, the entirety of the sequence data was contained in one column across many rows, which meant I could use `mutate()` and `case_when()` again with numerous `str_detect()` statements to transform the 3 basepair nucleotide combinations into the appropriate amino acid indicator. This transformation was saved as the custom function `basepairs_to_aa()`, which was then applied to the 10 aligned files in parallel by using the foreach and doParallel packages once again. Running this function in parallel was not technically necessary, as they each took only a few minutes in comparison to the initial alignment.
+
+Of note, even with the remaining data being filtered as much as I could to only contain high quality sequences, there still existed instances where the sequencing software could not declare what the basepair is- that is it is essentially unable to declare which amino acid it ultimately is. These were denoted as "X", which were then later converted to `NA` before modeling.
+
+The final step in this script is to convert from each record having many rows but 1 column for the sequence, back to each record having one row and the sequence spread across many columns. This was accomplished using `pivot_longer()`, and once this was completed the files were exported as .csvs.
+
+#### Script 05 - Merging the cleaned files into train and test datasets
+
+The last script is to merge the cleaned patient metadata with the cleaned patient sequence data. Since the sequencing data had additional rounds of eliminating rows that would cause issues for the modeling, it was used as the dataframe to ensure we keep rows in when leveraging the `right_join()` from the tidyverse package. However, before alignment there was one last step to perform on the sequence files, which was to cutoff the sequences wherever a "Stop" codon appeared. The stop codon is meant to tell the cellular machinery to stop creating a protein, and while there is some evidence that in certain instances multiple stop codons in sequence are required to actually stop the protein creation, for simplicity of this model I decided if there was a stop codon, then anything after that would be discarded as it would not have been part of the spike protein. I achieved this by using the `unite()` function to combine the sequence columns, then `str_split_i()` to split the string wherever "STOP" appeared, and then saved the first result of str_split back as the only sequence for each record. Before splitting the data up, a new column was made to record the length of the protein sequence. Then, I used `separate_wider_position()` to re-split the sequence data back into each amino acid position having its own column. These actions were all wrapped together under the custom function `stop_codons_trimming()`.
+
+Any amino acid position columns that were NA across all of the dataframe were dropped, and now the datasets were ready for merging. I first used `rbind()` to bind the training sequence datasets together, and then the testing sequence datasets together before using `right_join()` to join with the metadata data frames. The merged files were then written to .csv, and are displayed below.
+
+The last step was to convert the gender category, currently Male and Female, into 0s and 1s respectively.
+
+```{r}
+train_df <- read_csv("Merged_Dataframes/Training_Data_Merged.csv", 
+                     col_types = cols(.default = "c")) |> 
+  select(-1) #remove accessioning_id
+
+test_df <- read_csv("Merged_Dataframes/Testing_Data_Merged.csv", 
+                     col_types = cols(.default = "c")) |>
+  select(-1) #remove accessioning_id
+
+train_df |> head(3)
+test_df |> head(3)
+```
+
+Due GISAID prohibiting sharing of the data, the above cleaned dataframes have their accessioning_id columns removed. This is also why the GitHub repository for this project is also without any data files.
+
+After numerous rounds of filtering out data that would not serve well within the model, the training dataset is left with 10,155 records, whereas with the test sets contain:
+
+```{r}
+test_df |> 
+  select(test_set_id) |> 
+  table()
+```
+
+Our 2023 data test set has 2516 records, Mexico with 1924, and lastly Italy with 1991.
+
+## Dataset Visualizations
+
+With the datasets finally cleaned and merged, the exploration of the datasets can begin.
+
+#### Dataset Demographics
+
+One of the big concerns about is about the distribution of data points among the classes- specifically `$diseased`, which is intended to be the response variable for any future modeling.
+
+```{r}
+train_df |> 
+  select(disease_status) |> 
+  table()
+
+test_df |> 
+  group_by(test_set_id) |> 
+  select(test_set_id, disease_status) |> 
+  table()
+```
+
+This data can be represented a bit more clearly as plots:
+
+```{r}
+#| label: Class Representations of Datasets
+#| fig-cap: 
+#|   - "Age and Gender Demographics of the Data by disease status"
+#| fig-subcap:
+#|   - "Note: Y-axis is not consistent across plot"
+#|   - "Key: 0 - Male, 1 - Female"
+#| layout-ncol: 2
+#| column: page
+
+train_df |> 
+  select(patient_age, disease_status, gender) |> 
+  mutate(patient_age = as.double(patient_age)) |> 
+  count(disease_status, patient_age, gender) |> 
+  ggplot(aes(x = patient_age, y = n, fill = gender)) + 
+  geom_col() + 
+  facet_wrap(~disease_status, nrow = 3, scales = "free_y") + 
+  labs(y = "Number of Instances", 
+       x = "Patient Age", 
+       fill = "Gender",
+       title = "Training data") + 
+  theme(legend.position = "none")
+
+test_df |> 
+  select(patient_age, disease_status, gender, test_set_id) |> 
+  mutate(patient_age = as.double(patient_age)) |> 
+  count(disease_status, patient_age, gender, test_set_id) |> 
+  ggplot(aes(x = patient_age, y = n, fill = gender)) + 
+  geom_col() + 
+  facet_wrap(~disease_status, nrow = 2) + 
+  labs(y = "Number of Instances", 
+       x = "Patient Age", 
+       fill = "Gender",
+       title = "Testing data")
+```
+
+There is a higher representation of roughly 16-22 YOs in the training dataset for the 'mild' disease state versus the other combinations. The other combinations otherwise roughly follow a normal distribution.
+
+```{r}
+#| layout: [[1, 1]]
+train_df |> 
+  select(gender, disease_status) |> 
+  count(disease_status, gender) |> 
+  ggplot(aes(x = disease_status, y = n, fill = gender)) + 
+  geom_col(position = "dodge") + 
+  labs(y = "Number of Instances", 
+       x = "Disease State", 
+       fill = "Gender", 
+       title = "Training data by Disease State")
+
+test_df |> 
+  select(gender, disease_status, test_set_id) |> 
+  count(disease_status, gender, test_set_id) |> 
+  ggplot(aes(x = disease_status, y = n, fill = gender)) + 
+  geom_col(position = "dodge") + 
+  facet_wrap(~test_set_id) + 
+  labs(y = "Number of Instances", 
+       x = "Disease State", 
+       fill = "Gender", 
+       title = "Testing data by Disease State by set ID") + 
+  theme(legend.position = "none")
+```
+
+All three test sets have different distributions along the disease state labels. In comparison to the training set, it appears that test set 03, Italy, is the closest in distribution as the training set. The second test set, Mexico, has a much higher proportion of severe cases than any other set. This will make for a good testing set as there may be new underlying patterns that exist within this dataset that did not in the training or testing set 03. And lastly, with the first set, 2023, isn't quite as similar to the training data, but consider the time period for this test set versus the training. Viruses accumulate mutations by generations, so as a given pandemic progresses, it is expected the virus genome is more dissimilar as further time passes in comparison to the original specimen, as it accumulates mutations to become more infectious or other 'qualities' that would would aid in the virus continuing to the next generation. In short, we can expect that the first set for 2023 data has accumulated more mutations than the 2022 training data, which could explain why there is a higher proportion of severe disease states within this testing set. It also makes for a good 'hold-out' data set for our future models- is it able to predict the disease state correctly when facing new mutations not contained in the training data?
+
+#### Amino Acid Variation
+
+Before moving onto the modeling however, the type of mutations that might exist across the datasets would be interesting to explore. Are there any amino acid positions with a lot of mutations?
+
+```{r}
+#| fig-subcap:
+#|   - "a) Using only training set data"
+variable_list <- train_df |> 
+  select(-c(1:3)) |> 
+  pivot_longer(cols = c(1:1273), names_to = "aa_pos",
+               values_to = "aa") |> 
+  count(aa_pos, aa) |> 
+  rename(mut_freq = n) |> 
+  filter(mut_freq < 10100 & mut_freq > 14) |> 
+  count(aa_pos) |> 
+  filter(n > 6) |> 
+  pull(aa_pos)
+
+train_df |> 
+  select(-c(1:3)) |> 
+  pivot_longer(cols = c(1:1273), names_to = "aa_pos",
+               values_to = "aa") |> 
+  filter(aa_pos %in% variable_list) |> 
+  arrange(aa) |> 
+  ggplot(aes(x = aa, fill = aa_pos)) + 
+  geom_bar() + 
+  labs(x = "Amino Acid",
+       y = "Number of Occurences", 
+       fill = "Amino Acid\nPosition",
+       title = "Highly Variable Amino Acid Composition")
+```
+
+It is interesting to see the distribution of amino acids, especially those that were pretty infrequent- H, L, Q, R, and T. Most of the variable amino acids seem to have 3-4 main variants, with the remaining mutations constituting little of the overall proportion. The 'NA' amino acid can be interpreted as 'X', or an ambiguous amino acid call. Since all of these amino acids have more than one other variation besides X appearing within the data, X cannot be easily be substituted with any of these with certainty.
+
+## Model Goals & Approaches
+
+Due to the response variable `disease_status` being categorical, and our dataframe containing both integer & string variables, this limits the models available to use. Below is a summary of the models that will be used:
+
++--------------------------------------+------------------+
+| Model                                | Parameters       |
++======================================+==================+
+| Logistic Regression                  | N/A              |
++--------------------------------------+------------------+
+| Logistic Regression with Elastic Net | Penalty: 0.001   |
+|                                      |                  |
+|                                      | Mixture: 0.6     |
++--------------------------------------+------------------+
+| Random Forest                        | \# of Trees: 300 |
++--------------------------------------+------------------+
+| XGBoost                              | \# of trees: 200 |
+|                                      |                  |
+|                                      | tree_depth: 10   |
+|                                      |                  |
+|                                      | learn_rate: 0.1  |
++--------------------------------------+------------------+
+| LightGBM                             | \# of trees: 500 |
+|                                      |                  |
+|                                      | tree_depth: 30   |
+|                                      |                  |
+|                                      | learn_rate: 0.01 |
++--------------------------------------+------------------+
+
+The original intention for the data frame was to encode the sequence variables, which are characters, as dummy variables. However, due to the sheer number of amino acid positions, even if every amino acid position was limited to 3 dummy variables, this would mean our model would be dealing with over 3,500 variables. This simply was too large of a scale to tackle computationally, or for intepretation- so I decided to encode the sequences as integers as the inspiring paper did[@Sokhansanj]. Each possible amino acid was assigned an integer value based on the tables below:
+
+```{r}
+train_df_cat <- read_csv("Merged_Dataframes/Training_Data_Merged.csv",
+                     col_types = cols(.default = "c", gender = "i", patient_age = "i"))
+train_df_cat |> 
+  pivot_longer(cols = -c(1:4),
+               names_to = "aa_pos",
+               values_to = "aa_code") |> 
+  select(aa_code) |> 
+  table()
+
+train_df_cat |> 
+  pivot_longer(cols = -c(1:4),
+               names_to = "aa_pos",
+               values_to = "aa_code") |> 
+  mutate(aa_code = case_when(
+    aa_code = is.na(aa_code) ~ "zunknown",
+    .default = aa_code)) |> 
+  mutate(aa_code = as.integer(as.factor(aa_code))) |> 
+  mutate(aa_code = case_when(
+    aa_code == 21 ~ 0, #changing the NA values to 0 instead
+    .default = aa_code)) |> 
+  select(aa_code) |> 
+  table()
+```
+
+Note that any NAs, or X, indicating unknown amino acid, were set to 0.
+
+This altered form of the clean data is also available within the Merged_Dataframes folder, with 'integer_encoded' in front of the file name.
+
+For most of the models, at least one hyperparameter was tuned using an 3 mc_cv split of the training data. The hyperparameters were evaluated using the metrics accuracy and roc_auc. Once the ideal parameters were realized, these were then brought into the last script, Model_Fitting.R. Parallel computing was utilized in the discovery of the optimal hyperparameters due to the size of the dataset.
+
+#### Recipe Used
+
+The following recipe was used for all models within this report, including when tuning the hyperparameters:
+
+```{r}
+#| eval: false
+
+recipe_default <- recipe(disease_status ~ ., 
+                         train_df) |>
+  step_zv(all_predictors()) |>  # removes covariates with no variance
+  step_other(all_nominal_predictors(), threshold = 0.03) |>  #anything with >3% occurrence is put under 'other'
+  step_normalize(patient_age) |> #normalize age
+  step_novel(all_nominal_predictors()) #allow for new factors in test data
+```
+
+#### Logistic Regression
+
+Logistic regression for classification using the function `glm()` was the first model, and it had no hyperparameters that were tuned.
+
+#### Logistic Regression - Elastic Net
+
+The next model was logistic regression, combined with elastic net is from the `glmnet` package. This was the first model to use hyperparameter tuning, with the two parameters tuned were the penalty term and the mixture. The penalty term for LASSO was given the following values for evaluation: 0.001, 0.01, and 0.1. The mixture term determines the 'type' of logistic regression- a mixture term of 0 would indicate simply logistic regression, a mixture of 1 would indicate a LASSO model, and lastly a term of 0.5 gives an elastic net model. The tuning parameters for mixture were allowed to range from 0 to 1, increasing by 0.1. Below are the resulting plots for hyperparameter tuning:
+
+```{r}
+#| layout: [[1, 1]]
+
+logistic_tuning <- read_csv("Tuning_Metric_Dfs/logistic_tuning.csv",
+                            show_col_types = FALSE)
+
+logistic_tuning |> 
+  filter(.metric == "accuracy") |> 
+  ggplot(aes(x = log(penalty),
+             y = mixture,
+             fill = mean)) +
+  geom_tile() +
+  scale_fill_distiller(palette = "Spectral") + 
+  labs(x = "Log of Penalty Term",
+       y = "Mixture Term",
+       fill = "Accuracy mean")
+
+logistic_tuning |> 
+  filter(.metric == "roc_auc") |> 
+ggplot(aes(x = log(penalty),
+           y = mixture,
+           fill = mean)) +
+  geom_tile() +
+  scale_fill_distiller(palette = "Spectral") + 
+  labs(x = "Log of Penalty Term",
+       y = "Mixture Term",
+       fill = "roc_auc mean")
+
+logistic_tuning |> 
+  slice_max(mean, by = .metric, n = 2)
+```
+
+As can be seen with the plots and the resulting table, there are two options for the mixture parameter with the penalty of 0.001. I went with the mixture term of 0.06, as this brings the model close to elastic net which I preferred to try running rather than the mixture term of 0.01, which would mean a model very similar to the first model, logistic regression with no add-ons. However, the accuracy and roc_auc metrics did differ on which mixture was best, with roc_auc preferring a model close to LASSO as opposed to elastic net, with the mixture being 1.0 and 0.9.
+
+#### Random Forest
+
+Random Forest is a decision tree model that splits the data up according to its features to assign the response variable, and does so by combining the probability of a label across multiple trees. Implementing random forest using the `ranger` package meant there are several hyperparameters I could fine-tune- however due to the size of the dataset I decided to only seek out the optimal tuning for the number of trees within the model. I allowed it to range from 100 to 2000, with increments of 50, for the following results:
+
+```{r}
+rf_tuning <- read_csv("Tuning_Metric_Dfs/rf_tuning.csv",
+                            show_col_types = FALSE)
+
+rf_tuning |> 
+  rename(metric = 2) |> 
+  ggplot(aes(x = trees,
+             y = mean)) +
+  geom_line() +
+  geom_point() + 
+  facet_wrap(~metric, scales = "free_y") + 
+  labs(x = "# of Trees",
+       y = "Mean of Metric",
+       color = "Metric")
+
+rf_tuning |> 
+  slice_max(mean, by = .metric)
+```
+
+While the metrics do not completely agree on which number of trees is the best, I went with 300 as it had a lower std_err and would be more efficient computationally. I feared with trees equal to 750, it would be veering towards over fitting the training data.
+
+#### XGBoost
+
+XGBoost is a boosted tree model that combines decision trees such as what is used within random forest with gradient boosting. The gradient boosting is used to identify 'trees' that are misclassifying data- and seeks to pass that knowledge onto the next model to try to minimize misclassifying the same data. The model for XGBoost was implemented using the `xgboost` package, and had the following hyperparameters tuned: trees, tree_depth, and learn_rate. The number of trees was limited to 100 to 500 by every 100, which is more limited than for the random forest tuning, due to the fact that there would be increased number of combinations with the other parameters. I did not expect the number of trees to fluctuate much more than what was found to be optimal for random forest. For the tree_depth, it was allowed the range of 10, 20, and 30, whereas the learning rate was permitted 0.001, 0.01, and 0.1. Below are the results for the hyperparameter tuning:
+
+```{r}
+xgb_tuning <- read_csv("Tuning_Metric_Dfs/xgb_tuning.csv",
+                            show_col_types = FALSE)
+
+xgb_tuning |> 
+  slice_max(mean, by = .metric, n = 2)
+```
+
+Since there were 3 parameters being tuned, a plot is not ideal. However, using slice_max the top combination of hyperparameters is with trees equal to 200, a depth of 10, and learning rate of 0.1 in terms of accuracy. With the metric roc_auc, trees of 100, depth of 10, and learning rate of 0.1 is very close to the mean of the first combination, but in second place for roc_auc is the first combination, so ultimately this is the one I went with.
+
+#### LightGBM
+
+Last but not least is the LightGBM model. LightGBM can be considered as more similar to xgboost rather than random forest. Ultimately, the main difference between the models is that xgboost seeks to grow trees level-wise, and typically there is a max-depth that it will 'stop' the tree at even if it could technically try to split further. Some packages now have the parameter of max-depth as open to being altered- which I did use for xgboost tuning. Before the max-depth was implemented for XGBoost, LightGBM was introduced as it seeks to grow trees at each leaf node as needed and can expand the maximum 'depth' far further than earlier implementations of XGBoost. Because of this, LightGBM results should be pretty similar to xgboost for the final evaluation, however LightGBM is typically noted to be quicker computationally. In terms of this dataset, even with just the hyperparameter tuning step, the implementation of LightGBM was noticeably faster.
+
+```{r}
+lightgbm_tuning <- read_csv("Tuning_Metric_Dfs/lightgbm_tuning.csv",
+                            show_col_types = FALSE)
+
+lightgbm_tuning |> 
+  slice_max(mean, by = .metric, n = 3)
+```
+
+With LightGBM, there were several combinations that were very close- so when considering both metrics, the combination of hyperparameters that appears across both metrics in the top is trees equal to 500, tree_depth of 30, and learning rate of 0.01.
+
+## Model Evaluation
+
+With the models fit, what was left was the 3 test sets. Since I did not use any of the test sets when tuning the hyperparameters, I fit all 3 separately so we can evaluate the performance for all 5 models.
+
+#### Accuracy, F1-Score, and MCC
+
+```{r}
+predictions <- read_csv("Merged_Dataframes/Predictions.csv",
+                            show_col_types = FALSE)
+
+predictions |> glimpse()
+```
+
+This dataframe contains all the predictions for all 5 models across the 3 datasets. Viewing our 3 metrics, accuracy, F1 score, and MCC as a plot:
+
+```{r}
+#| fig-subcap:
+#|   - "Number indicates test set ID"
+
+library(yardstick)
+covid_metrics <- metric_set(accuracy, mcc, f_meas)
+
+disease_results <- predictions |> 
+  mutate(Disease_status = as.factor(Disease_status),
+         .pred_class = as.factor(.pred_class)) |> 
+  group_by(model_names, id) |>
+  covid_metrics(truth = Disease_status,
+                estimate = .pred_class)
+
+disease_results |>
+  ggplot(aes(y = model_names, 
+             x = .estimate, 
+             fill = model_names)) + 
+  geom_col() +
+  facet_wrap(vars(id, .metric)) + 
+  labs(x = "Metric Estimate", 
+       y = "Model Type") + 
+  theme(legend.position = "none")
+```
+
+The results are pretty surprising. One of the major patterns is across the board, all of the models really struggled with test set 02. Recall that test set 2, is the test set for Data from Mexico, but it had a far different proportion of severe to mild than the training data, or any of the other testing data sets. As such, all of the models really struggled.
+
+Taking a closer look at two of the metrics, accuracy and F1 score:
+
+```{r}
+disease_results |>
+  filter(.metric == "accuracy" | .metric == "f_meas") |> 
+  ggplot(aes(y = model_names, 
+             x = .estimate, 
+             fill = model_names)) + 
+  geom_col() +
+  facet_wrap(vars(id, .metric), nrow = 3, scales = "free_x") + 
+  labs(x = "Metric Estimate", 
+       y = "Model Type") + 
+  theme(legend.position = "none")
+```
+
+Elastic net actually does pretty well, moreso than I would have expected. The overall top performer seems to vary depending on the test set however.
+
+```{r}
+disease_results |>
+  filter(.metric == "accuracy" | .metric == "f_meas") |> 
+  slice_max(.estimate, by = c(.metric, id), n = 1)
+```
+
+Each test set had a different 'best' model, and the second test set actually had two different models depending on the metric. Test set 1 favored elastic net, whereas random forest performed better with test set 3.
+
+But when considering the 3rd metric MCC:
+
+```{r}
+disease_results |>
+  filter(.metric == "mcc") |> 
+  ggplot(aes(y = model_names, 
+             x = .estimate, 
+             fill = model_names)) + 
+  geom_col() +
+  facet_wrap(~id) + 
+  labs(x = "Metric Estimate", 
+       y = "Model Type") + 
+  theme(legend.position = "none")
+```
+
+For MCC, it can take values between -1 and 1, with a value of 0 essentially indicating that the model has no better chance at predicting the response variable than a random coin toss. The models struggled with test set 2 the most according to the other metrics, and it appears that is the same case with MCC as the metric as well.
+
+```{r}
+disease_results |>
+  filter(.metric == "mcc") |> 
+  slice_max(.estimate, by = id, n = 2)
+```
+
+Looking at the top 2 models for each metric, it seems the boosted tree models appear slightly more than the other models. XGBoost and LightGBM both were more successful in terms of mcc with test set 02, but viewing the estimate shows they were barely any better than a random 50 50 guess for t`disease_status`. However, with test set 01 the estimate isn't that bad for elastic net and logistic regression. I was quite surprised to see logistic regression pop up as a decent model for any of the test sets. And lastly, for test set 2 it seems the tree-based models did succeed, with XGBoost popping up again and random forest.
+
+```{r}
+disease_results |>
+  slice_max(.estimate, by = c(.metric, id), n = 1)
+```
+
+Looking at the dataframes as a whole, XGBoost and Elastic net are popping up the most frequently, with each being the 'best' model for a test set and metric combination 3 times.
+
+#### ROC & ROC-AUC
+
+```{r}
+roc_all <- predictions |> 
+  mutate(Disease_status = as.factor(Disease_status)) |> 
+  group_by(model_names, id) |>
+  roc_curve(truth = Disease_status, 
+            .pred_mild,
+            event_level = "second")
+
+roc_all |> 
+  ggplot(aes(x = 1 - specificity, 
+             y = sensitivity, 
+             color = model_names)) +
+  geom_path() + 
+  geom_abline(slope = 1, intercept = 0) + 
+  labs(x = "False Positive Rate(1 - Specificity)",
+       y = "False Negative Rate(Sensitivity)",
+       color = "Model Names") + 
+  facet_wrap(~id, ncol = 2, nrow = 2)
+```
+
+Unfortunately, looking at the ROC estimates none of our models are doing all that well. In fact, they all struggle to surpass the random classifier(black line), that would just be a 50 50 guess as to the `disease_status`.
+
+```{r}
+roc_auc_all <- predictions |>
+  mutate(Disease_status = as.factor(Disease_status)) |> 
+  group_by(model_names, id) |> 
+  roc_auc(truth = Disease_status,
+          .pred_mild,
+          event_level = "second")
+
+roc_auc_all |> 
+  select(model_names, id, .estimate) |> 
+  arrange(desc(.estimate))
+```
+
+By ROC-AUC they are all doing about the same, which is poor. It is interesting to note that test set 2, the one the models all seemed to struggle on based on the other 3 metrics, had slightly higher estimates than the rest.
+
+Since both my training dataset and all my test datasets had different proportions for the distribution of the `disease_status` category, I am inclined to move forward with the results of the MCC metric over the other four, since there does not seem to be a consensus. Recalling the MCC results:
+
+```{r}
+disease_results |>
+  filter(.metric == "mcc") |> 
+  slice_max(.estimate, by = id, n = 2)
+```
+
+It would be between elastic net and XGBoost as the 'best' models to move forward with. Recall, test set 3 had the most similar distribution in comparison to our training data, whereas our two hold out datasets were sets 1 and 2. However, since the models performed rather poorly in general, maybe a closer look at the model parameters is warranted.
+
+#### Poor Fit Assessment - Parameter Estimations
+
+Tree-based models like XGBoost do not give parameter estimates like logistic net would, so lets move forward with just elastic net to estimate the parameters using bootstrapping. Using bootstrapping(n = 20), I can construct an interval of the coefficients for logistic net that should include what the coefficients were that went into building the model.
+
+```{r}
+elastic_coefs <- read_csv("Merged_Dataframes/elastic_coefs.csv",
+                            show_col_types = FALSE)
+
+elastic_coefs <- elastic_coefs |>
+  summarize(std.error = sd(estimate),
+            estimate = mean(estimate),
+            .by = term) |> 
+  mutate(xlower = estimate - (2 * std.error),
+         xupper = estimate + (2 * std.error))
+
+elastic_coefs
+```
+
+Using the bounds from 20 bootstrapped draws, I can construct the interval. However, I have 1,259 coefficients which is too many to properly visualize. Instead, let's see the top 30 absolute value of the estimate and the top 30 with the smallest standard error, without including the intercept.
+
+```{r}
+#| layout: [[1, 1]]
+#| fig-subcap:
+#| - "a) Largest abs(Estimates)"
+#| - "b) Largest abs(Estimates) without containing 0"
+elastic_coefs |> 
+  filter(term != "(Intercept)") |> 
+  slice_max(abs(estimate), n = 30) |> 
+  ggplot(aes(x = estimate, y = term)) + 
+  geom_segment(aes(x = xlower, xend = xupper, yend = term)) + 
+  geom_point(color = "red") + 
+  geom_point(aes(x = xlower), shape = "|") + 
+  geom_point(aes(x = xupper), shape = "|") + 
+  labs(x = "Coefficient Estimate",
+       y = "Coefficient Name")
+
+elastic_coefs |> 
+  filter(term != "(Intercept)") |> 
+  mutate(sign = xlower * xupper) |> 
+  filter(sign > 0) |> 
+  slice_max(abs(estimate), n = 30) |> 
+  ggplot(aes(x = estimate, y = term)) + 
+  geom_segment(aes(x = xlower, xend = xupper, yend = term)) + 
+  geom_point(color = "red") + 
+  geom_point(aes(x = xlower), shape = "|") + 
+  geom_point(aes(x = xupper), shape = "|") + 
+  labs(x = "Coefficient Estimate",
+       y = "Coefficient Name")
+```
+
+For plot a, although these are the largest estimates, some of them such as aa_55 or aa_35 have quite large bounds. Additionally, many of these coefficients contain 0 within their bounds, meaning although our bootstraps estimated their mean to not be 0, 0 is certainly within the realm of possibilities for future model fits with different seeds, indicating these coefficients may not be useful for modeling. For plot b, these are the biggest coefficients that do not contain 0 within their bounds across the 20 bootstraps. Some of these coefficients are pretty small in terms of their estimate, but there is evidence that 0 is not included.
+
+## Results Discussion
+
+Several major decisions were undertaken in the data pre-processing, cleaning, and even tidying of the data in preparation for modeling that have undeniable impacts on the results of all models fit. The most important of these is likely the choice to integer encode the amino acid sequences as opposed to using dummy variables. Additionally, test datasets were not drawn from the same time frame and location as the training data, but rather from different time frames and populations, meant to represent how varied the data truly could be. As a result, there was overall a lack of poor model fitting to all three training datasets in spite of hyper-parameter tuning to achieve the best models based on the training data. The initial goal of this dataset was to attempt to predict the severity of Covid-19 based on sequence data, however the inclusion of the entire S-protein sequence appears to have been too much noise for any meaningful patterns to be captured. The test sets were specifically chosen to be of separate 'populations' from the training data, to see how far the Covid-19 data from a specific region and time could be used to predict for other region and time combinations- so the lack of poor model prediction is not all that surprising.
+
+However, the models used within this report and their resulting largest coefficients could point to key amino acid positions that can be used for future modeling. By retaining the amino acid positions that correlated to larger coefficients/importance across the models used within this report, one could construct a slimmed dataframe that is better able to be fit and predict Covid-19. Typically this would be achieved using PCA with continuous data, however due to the categorical nature of sequence data it is largely impossible. Alternative methods to improve the metrics of the models for this data could be to also incorporate use of multiple correspondence analysis on any non-zero coefficients.
+
+## Notes for Replication
+
+Please see the README.md for information about package versions used and the GISAID IDs used for this project.
+
+This project and files(not including data) can be found at the following GitHub repository: <https://github.com/Mmedwards23/Covid19_Severity_Prediction>
