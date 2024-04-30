@@ -8,6 +8,8 @@ General Outline:
 - Package Versions
 
 GISAID Epi-sets:
+Due to the GISAID user agreement, data cannot be directly uploaded without explicit permission. Below are the EPI_SETs for all data used within this report, including their DOI for easy retrieval and replication.
+
 Training: 
 EPI_SET ID: EPI_SET_240430wx
 DOI: 10.55876/gis8.240430wx
